@@ -2,6 +2,7 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <portaudio.h>
+#include <complex> // for complex numbers
 #include <iostream>
 
 #define TABLE_SIZE (400)
@@ -13,12 +14,37 @@
 #define M_PI (3.14159265)
 #endif
 
+// This is the resolution
+#define WIDTH (1200)
+#define HEIGHT (1200)
+
 using namespace cv;
 
 typedef struct paTestData
 {
     float pitch;
     unsigned long n;
+};
+
+typedef struct imageStuff
+{
+    Mat image;
+    int columnValue[WIDTH]{};
+};
+
+struct Timer
+{
+    std::chrono::time_point<std::chrono::steady_clock> start, end;
+
+    Timer()
+    {
+        start = std::chrono::high_resolution_clock::now();
+    }
+    ~Timer()
+    {
+        end = std::chrono::high_resolution_clock::now();
+        std::cout << "Time taken: " << (std::chrono::duration<float>(end - start)).count() * 1000.f << "ms\n";
+    }
 };
 
 static int patestCallback(const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData) {
@@ -30,7 +56,6 @@ static int patestCallback(const void* inputBuffer, void* outputBuffer, unsigned 
     (void)inputBuffer;
     for (unsigned long i = 0; i < framesPerBuffer; i++, data->n++) {
         float v = sin(data->pitch * 2 * M_PI * ((float)data->n / (float)TABLE_SIZE));
-        //printf("Data value: %lu\n", data->n);
         *out++ = v;
         *out++ = v;
 
@@ -51,7 +76,7 @@ static void ErrorExit(const char* errorMessage, int err) {
 
 static void StreamFinished(void* userData)
 {
-    printf("Stream Completed.\n");
+    //printf("Stream Completed.\n");
 }
 
 static void PlaySound(PaStream* stream) {
@@ -59,8 +84,6 @@ static void PlaySound(PaStream* stream) {
 
     err = Pa_StartStream(stream);
     if (err != paNoError) ErrorExit("Failed to start stream.",err);
-
-    printf("Blocking for for %d milliseconds.\n", BLOCKING_MILLISECONDS);
     Pa_Sleep(BLOCKING_MILLISECONDS);
 
     err = Pa_StopStream(stream);
@@ -80,8 +103,6 @@ static void PortAudio(float pitch) {
     paTestData data;
     data.n = 0;
     data.pitch = pitch;
-
-    
 }
 
 static void DisplayImageWindow(Mat img) {
@@ -92,31 +113,30 @@ static void DisplayImageWindow(Mat img) {
     }
 }
 
-static Mat preprocessing(std::string path, int threshold, int mandel_left_flip_value, int mandel_right_flip_value) {
-    Mat image1, image1_binary_map, mandel_left, mandel_right, concat_binary_map;
-
-    image1 = imread(path, 0);
-    image1_binary_map = image1 > threshold;
-
-    mandel_left = image1_binary_map(
-        Range(0, round(image1_binary_map.rows / 2)),  // Defines the upper half of the image.
-        Range(0, image1_binary_map.cols)
-    );
-
-    mandel_right = image1_binary_map(
-        Range(round(image1_binary_map.rows / 2), image1_binary_map.rows), // Defines the lower side of the image.
-        Range(0, image1_binary_map.cols)
-    );
-
-    // If a flip value has been declared flip the image.
-    if (mandel_left_flip_value != NULL) flip(mandel_left, mandel_left, mandel_left_flip_value);
-    if (mandel_right_flip_value != NULL) flip(mandel_right, mandel_right, mandel_right_flip_value);
-    hconcat(mandel_left, mandel_right, concat_binary_map);
-
-    return concat_binary_map;
+static imageStuff preprocessing() {
+    Timer timer;
+    imageStuff image;
+    image.image = *new Mat(WIDTH, HEIGHT, CV_8UC3, Scalar(0, 0, 0));
+    for (int x = 0; x < WIDTH; x++) {
+        for (int y = 0; y < HEIGHT; y++) {
+            std::complex<float> point((float)x / WIDTH - 1.5, (float)y / HEIGHT - 0.5);
+            std::complex<float> z(0, 0);
+            int nb_iter = 0;
+            while (abs(z) < 2 && nb_iter <= 20) {
+                z = z * z + point;
+                nb_iter++;
+            }
+            if (nb_iter < 20) image.image.at<Vec3b>(Point(x, y)) = Vec3b(0, 0, 0);
+            else {
+                if (image.columnValue[x] == NULL) image.columnValue[x] = y;
+                image.image.at<Vec3b>(Point(x, y)) = Vec3b(255, 255, 255);
+            }
+        }
+    }
+    return image;
 }
 
-static void restShit(Mat img) {
+static void restShit(imageStuff img) {
     PaStreamParameters outputParameters;
     PaStream* stream;
     PaError err;
@@ -151,46 +171,20 @@ static void restShit(Mat img) {
     err = Pa_SetStreamFinishedCallback(stream, &StreamFinished);
     if (err != paNoError) ErrorExit("Stream finished callback failed | %i", err);
 
-    float splitter = 10.f / img.rows;
-    for (int i = 0; i < img.cols; i++) {
-        for (int j = 0; j < img.rows; j++) {
-            if (img.at<uchar>(j, i) == 255) {
-                try
-                {
-                    // Draw a rectangle and play corresponding pitch sound.
-                    rectangle(img, Point(i - 5, j - 5), Point(i,j), Scalar(255));
-                    data.pitch = splitter * j;
-                    PlaySound(stream);
-                }
-                catch (const std::exception&)
-                {
-                    printf("%i | %i\n", i, j);
-                }
-
-                break;
-            }
-        }
+    float splitter = 10.f / img.image.rows;
+    for (size_t i = 0; i < WIDTH; i++)
+    {
+        rectangle(img.image, Point(i - 5, img.columnValue[i] - 5), Point(i, img.columnValue[i]), Scalar(255, 255, 255));
+        data.pitch = splitter * img.columnValue[i];
+        PlaySound(stream);
     }
-
     CloseStream(stream);
 }
 
 int main() {
-    const int threshold = 128;
-    const std::string path = "Resources/mandel-small.jpg";
-    const int mandel_left_flip_value = NULL;
-    const int mandel_right_flip_value = -1;
-
-    
-
-    Mat img = preprocessing(
-        path,
-        threshold,
-        mandel_left_flip_value,
-        mandel_right_flip_value
-    );
-
-    std::thread t1(DisplayImageWindow, img);
+    printf("Generating mandelbrot, this can take a while...\n");
+    imageStuff img = preprocessing();
+    std::thread t1(DisplayImageWindow, img.image);
     std::thread t2(restShit, img);
     t1.join();
     t2.join();
