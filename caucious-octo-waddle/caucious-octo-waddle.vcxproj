@@ -72,6 +72,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>C:\src\vcpkg\packages\opencv4_x86-windows\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\src\vcpkg\packages\opencv4_x86-windows\debug\lib;C:\src\vcpkg\packages\opencv4_x86-windows\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -90,10 +92,14 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <PerUserRedirection>true</PerUserRedirection>
+      <AdditionalLibraryDirectories>C:\src\vcpkg\packages\opencv4_x86-windows\lib;C:\src\vcpkg\packages\opencv4_x86-windows\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -122,6 +128,7 @@
       <FloatingPointModel>Precise</FloatingPointModel>
       <AdditionalIncludeDirectories>C:\src\PortAudio\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -154,11 +161,12 @@
     <ClCompile Include="vision.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="audio.h" />
-    <ClInclude Include="mandeldata.h" />
-    <ClInclude Include="mandelbrot.h" />
-    <ClInclude Include="timer.h" />
-    <ClInclude Include="vision.h" />
+    <ClInclude Include="audio.hpp" />
+    <ClInclude Include="olc.hpp" />
+    <ClInclude Include="mandeldata.hpp" />
+    <ClInclude Include="mandelbrot.hpp" />
+    <ClInclude Include="timer.hpp" />
+    <ClInclude Include="vision.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />

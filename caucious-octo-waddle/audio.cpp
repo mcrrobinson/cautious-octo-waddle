@@ -1,118 +1,184 @@
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/imgproc.hpp>
-#include <portaudio.h>
-#include <complex> // for complex numbers
-#include <iostream>
+// Converts frequency (Hz) to angular velocity
+#include "audio.hpp"
 
-#include <cstddef>
-#include <cstdint>
-
-#include "audio.h"
-
-int patestCallback(const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData) {
-    Audio::PortData* data = (Audio::PortData*)userData;
-    float* out = (float*)outputBuffer;
-
-    (void)timeInfo;
-    (void)statusFlags;
-    (void)inputBuffer;
-    for (unsigned long i = 0; i < framesPerBuffer; i++, data->n++) {
-        float v = sin(data->pitch * 2 * data->pi * ((float)data->n / (float)data->table_size));
-        *out++ = v;
-        *out++ = v;
-
-        // Optimisations.
-        if (v >= data->table_size) { v -= data->table_size; }
-        if (v >= data->table_size) { v -= data->table_size; }
-    }
-    return paContinue;
-}
-
-void StreamFinished(void* userData)
+double global_return(double dMsg)
 {
-    printf("Stream Completed.\n");
+	return audio.MakeNoise(dMsg);
 }
 
-void Audio::PlaySound(PaStream* stream)
+double Audio::w(double dHertz)
 {
-    int err;
-
-    err = Pa_StartStream(stream);
-    if (err != paNoError) ErrorExit("Failed to start stream.", err);
-    Pa_Sleep(GetTableSize());
-
-    err = Pa_StopStream(stream);
-    if (err != paNoError) ErrorExit("Failed to stop stream.", err);
+	return dHertz * 2.0 * PI;
 }
 
-void Audio::PlayAudio(MandelData img) {
-    this->data.n = 0;
-    this->data.table_size = this->TABLE_SIZE;
-    this->data.pi = this->M_PI;
+double Audio::osc(double dHertz, double dTime, int nType){
+	switch (nType){
+	case OSC_SINE: // Sine wave bewteen -1 and +1
+		return sin(w(dHertz) * dTime);
 
-    this->err = Pa_Initialize();
-    if (this->err != paNoError) ErrorExit("Failed to initalise PortAudio", this->err);
+	case OSC_SQUARE: // Square wave between -1 and +1
+		return sin(w(dHertz) * dTime) > 0 ? 1.0 : -1.0;
 
-    this->outputParameters.device = Pa_GetDefaultOutputDevice();
-    if (this->outputParameters.device == paNoDevice) ErrorExit("Failed to get default output device", this->err);
+	case OSC_TRIANGLE: // Triangle wave between -1 and +1
+		return asin(sin(w(dHertz) * dTime)) * (2.0 / PI);
 
-    this->outputParameters.channelCount = 2;
-    this->outputParameters.sampleFormat = paFloat32;
-    this->outputParameters.suggestedLatency = Pa_GetDeviceInfo(this->outputParameters.device)->defaultLowOutputLatency;
-    this->outputParameters.hostApiSpecificStreamInfo = NULL;
+	case OSC_SAW_ANA: // Saw wave (analogue / warm / slow)
+	{
+		double dOutput = 0.0;
 
-    this->err = Pa_OpenStream
-    (
-        &this->stream,
-        NULL,
-        &this->outputParameters,
-        GetSampleRate(),
-        GetFramesBuffer(),
-        paClipOff,
-        patestCallback,
-        &this->data
-    );
-    if (this->err != paNoError) ErrorExit("Failed to open output stream.", this->err);
+		for (double n = 1.0; n < 40.0; n++)
+			dOutput += (sin(n * w(dHertz) * dTime)) / n;
 
-    this->err = Pa_SetStreamFinishedCallback(this->stream, &StreamFinished);
-    if (this->err != paNoError) ErrorExit("Stream finished callback failed | %i", this->err);
+		return dOutput * (2.0 / PI);
+	}
 
-    float splitter = 10.f / img.canvas.rows;
+	case OSC_SAW_DIG: // Saw Wave (optimised / harsh / fast)
+		return (2.0 / PI) * (dHertz * PI * fmod(dTime, 1.0 / dHertz) - (PI / 2.0));
 
 
-    for (auto& e : img.topdownPixelView)
-    {
-        rectangle(img.canvas, cv::Point(e.x - 10, e.y - 10), cv::Point(e.x + 10, e.y + 10), cv::Scalar(255, 255, 255));
-        this->data.pitch = splitter * e.y;
-        PlaySound(this->stream);
-    }
+	case OSC_NOISE: // Pseudorandom noise
+		return 2.0 * ((double)rand() / (double)RAND_MAX) - 1.0;
+
+	default:
+		return 0.0;
+	}
 }
 
-void Audio::ErrorExit(const char* errorMessage, int err) {
-    Pa_Terminate();
-    fprintf(stderr, errorMessage);
-    fprintf(stderr, "Error number: %d\n", err);
-    fprintf(stderr, "Error message: %s\n", Pa_GetErrorText(err));
+// Amplitude (Attack, Decay, Sustain, Release) Envelope
+struct sEnvelopeADSR {
+	double dAttackTime;
+	double dDecayTime;
+	double dSustainAmplitude;
+	double dReleaseTime;
+	double dStartAmplitude;
+	double dTriggerOffTime;
+	double dTriggerOnTime;
+	bool bNoteOn;
+
+	sEnvelopeADSR() {
+		dAttackTime = 0.10;
+		dDecayTime = 0.01;
+		dStartAmplitude = 1.0;
+		dSustainAmplitude = 0.8;
+		dReleaseTime = 0.20;
+		bNoteOn = false;
+		dTriggerOffTime = 0.0;
+		dTriggerOnTime = 0.0;
+	}
+
+	// Call when key is pressed
+	void NoteOn(double dTimeOn) {
+		dTriggerOnTime = dTimeOn;
+		bNoteOn = true;
+	}
+
+	// Call when key is released
+	void NoteOff(double dTimeOff) {
+		dTriggerOffTime = dTimeOff;
+		bNoteOn = false;
+	}
+
+	// Get the correct amplitude at the requested point in time
+	double GetAmplitude(double dTime) {
+		double dAmplitude = 0.0;
+		double dLifeTime = dTime - dTriggerOnTime;
+
+		if (bNoteOn)
+		{
+			if (dLifeTime <= dAttackTime)
+			{
+				// In attack Phase - approach max amplitude
+				dAmplitude = (dLifeTime / dAttackTime) * dStartAmplitude;
+			}
+
+			if (dLifeTime > dAttackTime && dLifeTime <= (dAttackTime + dDecayTime))
+			{
+				// In decay phase - reduce to sustained amplitude
+				dAmplitude = ((dLifeTime - dAttackTime) / dDecayTime) * (dSustainAmplitude - dStartAmplitude) + dStartAmplitude;
+			}
+
+			if (dLifeTime > (dAttackTime + dDecayTime))
+			{
+				// In sustain phase - dont change until note released
+				dAmplitude = dSustainAmplitude;
+			}
+		}
+		else
+		{
+			// Note has been released, so in release phase
+			dAmplitude = ((dTime - dTriggerOffTime) / dReleaseTime) * (0.0 - dSustainAmplitude) + dSustainAmplitude;
+		}
+
+		// Amplitude should not be negative
+		if (dAmplitude <= 0.0001)
+			dAmplitude = 0.0;
+
+		return dAmplitude;
+	}
+};
+
+// Global synthesizer variables
+std::atomic<double> dFrequencyOutput = 0.0;			// dominant output frequency of instrument, i.e. the note
+sEnvelopeADSR envelope;							// amplitude modulation of output to give texture, i.e. the timbre
+double dOctaveBaseFrequency = 110.0; // A2		// frequency of octave represented by keyboard
+double d12thRootOf2 = pow(2.0, 1.0 / 12.0);		// assuming western 12 notes per ocatve
+
+// Function used by olcNoiseMaker to generate sound waves
+// Returns amplitude (-1.0 to +1.0) as a function of time
+double Audio::MakeNoise(double dTime) {
+	// Mix together a little sine and square waves
+	double dOutput = envelope.GetAmplitude(dTime) *
+		(
+			+1.0 * osc(dFrequencyOutput * 0.5, dTime, OSC_SINE)
+			+ 1.0 * osc(dFrequencyOutput, dTime, OSC_SAW_ANA)
+			);
+
+	return dOutput * 0.4; // Master Volume
 }
 
-void Audio::CloseStream(PaStream* stream) {
-    Pa_CloseStream(stream);
-    Pa_Terminate();
-}
+void PlaySounds() {
+	// Get all sound hardware
+	std::vector<std::wstring> devices = olcNoiseMaker<short>::Enumerate();
 
-int Audio::GetTableSize() {
-    return this->TABLE_SIZE;
-}
+	// Display findings
+	for (auto d : devices) std::wcout << "Found Output Device: " << d << std::endl;
+	std::wcout << "Using Device: " << devices[0] << std::endl;
 
-int Audio::GetSampleRate() {
-    return this->SAMPLE_RATE;
-}
+	// Create sound machine!!
+	olcNoiseMaker<short> sound(devices[0], 44100, 1, 8, 512);
 
-int Audio::GetFramesBuffer() {
-    return this->FRAMES_PER_BUFFER;
-}
+	// Link noise function with sound machine
+	sound.SetUserFunction(global_return);
 
-double Audio::GetPi() {
-    return this->M_PI;
+	// Sit in loop, capturing keyboard state changes and modify
+	// synthesizer output accordingly
+	int nCurrentKey = -1;
+	std::atomic<bool> bKeyPressed = false;
+	while (1)
+	{
+		bKeyPressed = false;
+		for (int k = 0; k < 16; k++)
+		{
+			k = 3;
+			if (nCurrentKey != k)
+			{
+				dFrequencyOutput = dOctaveBaseFrequency * pow(d12thRootOf2, k);
+				envelope.NoteOn(sound.GetTime());
+				std::printf("Frequency: %uHz", unsigned(dFrequencyOutput));
+				nCurrentKey = k;
+			}
+
+			bKeyPressed = true;
+		}
+
+		if (!bKeyPressed)
+		{
+			if (nCurrentKey != -1)
+			{
+				std::wcout << "\rNote Off: " << sound.GetTime() << "s                        ";
+				envelope.NoteOff(sound.GetTime());
+				nCurrentKey = -1;
+			}
+		}
+	}
 }

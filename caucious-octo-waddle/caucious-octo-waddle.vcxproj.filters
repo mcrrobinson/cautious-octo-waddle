@@ -27,21 +27,27 @@
     <ClCompile Include="mandelbrot.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="timer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="audio.h">
+    <ClInclude Include="olc.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="mandelbrot.h">
+    <ClInclude Include="mandelbrot.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="timer.h">
+    <ClInclude Include="timer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="mandeldata.h">
+    <ClInclude Include="mandeldata.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vision.h">
+    <ClInclude Include="vision.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="audio.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

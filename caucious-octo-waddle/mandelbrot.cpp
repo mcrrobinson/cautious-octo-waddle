@@ -1,5 +1,5 @@
-#include "mandelbrot.h"
-#include "timer.h"
+#include "mandelbrot.hpp"
+#include "timer.hpp"
 
 MandelBrot::MandelBrot()
 {
