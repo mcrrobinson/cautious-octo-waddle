@@ -155,13 +155,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="audio.cpp" />
     <ClCompile Include="mandelbrot.cpp" />
     <ClCompile Include="timer.cpp" />
     <ClCompile Include="vision.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="audio.hpp" />
     <ClInclude Include="olc.hpp" />
     <ClInclude Include="mandeldata.hpp" />
     <ClInclude Include="mandelbrot.hpp" />
