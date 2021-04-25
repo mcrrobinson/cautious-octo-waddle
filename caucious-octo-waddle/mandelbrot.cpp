@@ -7,6 +7,10 @@ MandelBrot::MandelBrot()
     Timer timer;
     std::vector<uint8_t> escape_iter(LX * this->LY, this->MAX_ITER);
 
+    // Adding openmp adds threading for the following loops bettering performance.
+    // Specifies how many loops in a nested loop should be collapsed into a 
+    // iteration space and divided. Increases performance but results in duplication
+    // code leading to a larger binary.
 #pragma omp parallel for collapse(2)
     for (size_t y = 0; y < this->LY; ++y) {
         for (size_t bx = 0; bx < this->BLOCKS_X; ++bx) {
@@ -26,6 +30,9 @@ MandelBrot::MandelBrot()
 
             for (size_t iter = 0; iter < this->MAX_ITER; ++iter) {
 
+                // Modern CPU's support the AVX instruction set and can do operations with four floating 
+                // point numbers (double precision) at the same time. Since each pixel gets this approximation
+                // this could be taken advantage of.
 #pragma omp simd aligned(z_re, z_im, new_z_re, new_z_im, finished)
                 for (size_t v = 0; v < this->VECLEN; ++v) {
                     new_z_re[v] =
@@ -37,6 +44,7 @@ MandelBrot::MandelBrot()
 
                     auto const abs = z_re[v] * z_re[v] + z_im[v] * z_im[v];
 
+                    // For this we take an array escape_iter which is linearized.
                     if (!finished[v] && (abs > this->RADIUS)) {
                         finished[v] = true;
                         escape_iter[this->idx(bx, y) * this->VECLEN + v] = iter;
