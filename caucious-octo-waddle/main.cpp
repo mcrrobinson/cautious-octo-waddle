@@ -24,7 +24,19 @@ double PianoFrequency(int key = 49)
 
 double MakeNoise(double dTime)
 {
+    
     double dOutput = 1 * sin(dFrequencyOutput * 2 * PI * dTime);
+
+    // Sine wave with piano key frequency with expression to fade the tone.
+    // double dOutput = sin(2 * PI * dFrequencyOutput * dTime) * exp(-0.0004 * 2 * PI * dFrequencyOutput * dTime);
+    // 
+    // Overtones
+    // dOutput += sin(2 * 2 * PI * dFrequencyOutput * dTime) * exp(-0.0004 * 2 * PI * dFrequencyOutput * dTime) / 2;
+    // dOutput += sin(3 * 2 * PI * dFrequencyOutput * dTime) * exp(-0.0004 * 2 * PI * dFrequencyOutput * dTime) / 4;
+    // dOutput += sin(4 * 2 * PI * dFrequencyOutput * dTime) * exp(-0.0004 * 2 * PI * dFrequencyOutput * dTime) / 8;
+    // dOutput += sin(5 * 2 * PI * dFrequencyOutput * dTime) * exp(-0.0004 * 2 * PI * dFrequencyOutput * dTime) / 16;
+    // dOutput += sin(6 * 2 * PI * dFrequencyOutput * dTime) * exp(-0.0004 * 2 * PI * dFrequencyOutput * dTime) / 32;
+    // return dOutput;
 
     // Returns square wave, sounds like shit but doesn't have the knocking.
     if (dOutput > 0) return 0.1;
@@ -35,6 +47,20 @@ void PlaySounds(MandelData data)
 {
     int k;
     std::vector<std::wstring> devices = olcNoiseMaker<short>::Enumerate();
+
+    // Short represents 16 bits. This is the amount of accuracy the computer is 
+    // designating to one assumption of a sine wave (in this instance). 
+    // The Device 0 indicates the first output device windows found. 
+    // 44100 represents the sample rate.
+    // 1 represents the number of channels.
+    // 8 represents the number of blocks available for the queue.
+    // 256 is the number of samples in a block.
+    // 
+    // This block and queue model makes it so the variable time it takes windows
+    // to generate these waves get transferred into the queue and come out on
+    // the sound driver at the required sample rate, in this circumstance 44100hz.
+    // Increasing the blocks & block time would increase delay but allow the CPU
+    // to generate more cycles.
     olcNoiseMaker<short> sound(devices[0], 44100, 1, 8, 512);
     sound.SetUserFunction(MakeNoise);
 
@@ -80,3 +106,8 @@ int main() {
 
 	return 0;
 }
+
+// TODO:
+// Use expression method for amplitude decay to represent accurate key presses on a piano.
+// This would require a new thread for call of the sine function & to cut the thread once
+// the amplitude gets to a too low value for human hearing.

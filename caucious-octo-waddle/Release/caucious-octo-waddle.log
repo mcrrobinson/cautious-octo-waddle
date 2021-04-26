@@ -1,0 +1,10 @@
+﻿  main.cpp
+D:\Development\Code\cautious-octo-waddle\caucious-octo-waddle\mandelbrot.hpp(30,41): warning C4244: 'initializing': conversion from 'double' to 'const size_t', possible loss of data
+D:\Development\Code\cautious-octo-waddle\caucious-octo-waddle\mandelbrot.hpp(40,33): warning C4244: 'return': conversion from 'double' to 'uint8_t', possible loss of data
+D:\Development\Code\cautious-octo-waddle\caucious-octo-waddle\main.cpp(72,18): warning C4244: '=': conversion from 'float' to 'int', possible loss of data
+  Generating code
+  2 of 485 functions ( 0.4%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    2 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  caucious-octo-waddle.vcxproj -> D:\Development\Code\cautious-octo-waddle\Release\caucious-octo-waddle.exe

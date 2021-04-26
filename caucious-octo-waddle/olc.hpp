@@ -15,10 +15,17 @@
 
 const double PI = 2.0 * acos(0.0);
 
+// Uses the Windows WaveOut api.
+
+// Template class accepts; int, byte, char etc... as it's used to dertermine the 
+// accuracy of sine wave calculation by allocating bytes.
 template<class T> class olcNoiseMaker {
 public:
-	olcNoiseMaker(std::wstring sOutputDevice, unsigned int nSampleRate = 44100, unsigned int nChannels = 1, unsigned int nBlocks = 8, unsigned int nBlockSamples = 512)
-	{
+	olcNoiseMaker(	std::wstring sOutputDevice, 
+					unsigned int nSampleRate = 44100, 
+					unsigned int nChannels = 1, 
+					unsigned int nBlocks = 8, 
+					unsigned int nBlockSamples = 512){
 		Create(sOutputDevice, nSampleRate, nChannels, nBlocks, nBlockSamples);
 	}
 
@@ -27,8 +34,11 @@ public:
 		Destroy();
 	}
 
-	bool Create(std::wstring sOutputDevice, unsigned int nSampleRate = 44100, unsigned int nChannels = 1, unsigned int nBlocks = 8, unsigned int nBlockSamples = 512)
-	{
+	bool Create(std::wstring sOutputDevice, 
+				unsigned int nSampleRate = 44100, 
+				unsigned int nChannels = 1, 
+				unsigned int nBlocks = 8, 
+				unsigned int nBlockSamples = 512){
 		m_bReady = false;
 		m_nSampleRate = nSampleRate;
 		m_nChannels = nChannels;
@@ -62,21 +72,23 @@ public:
 				return Destroy();
 		}
 
-		// Allocate Wave|Block Memory
+		// Allocate the wave/block memory.
 		m_pBlockMemory = new T[m_nBlockCount * m_nBlockSamples];
-		if (m_pBlockMemory == nullptr)
-			return Destroy();
+		if (m_pBlockMemory == nullptr) return Destroy();
 		ZeroMemory(m_pBlockMemory, sizeof(T) * m_nBlockCount * m_nBlockSamples);
 
+		// The WaveOut api requires these wave headers to know about the blocks
+		// of memory. Each header contains the size of the block & a pointer to the
+		// location in memory.
 		m_pWaveHeaders = new WAVEHDR[m_nBlockCount];
-		if (m_pWaveHeaders == nullptr)
-			return Destroy();
+		if (m_pWaveHeaders == nullptr) return Destroy();
 		ZeroMemory(m_pWaveHeaders, sizeof(WAVEHDR) * m_nBlockCount);
+		for (unsigned int n = 0; n < m_nBlockCount; n++){
 
-		// Link headers to block memory
-		for (unsigned int n = 0; n < m_nBlockCount; n++)
-		{
+			// Block size.
 			m_pWaveHeaders[n].dwBufferLength = m_nBlockSamples * sizeof(T);
+
+			// Pointers
 			m_pWaveHeaders[n].lpData = (LPSTR)(m_pBlockMemory + (n * m_nBlockSamples));
 		}
 
@@ -84,60 +96,57 @@ public:
 
 		m_thread = std::thread(&olcNoiseMaker::MainThread, this);
 
-		// Start the ball rolling
 		std::unique_lock<std::mutex> lm(m_muxBlockNotZero);
 		m_cvBlockNotZero.notify_one();
 
 		return true;
 	}
 
-	bool Destroy()
-	{
+	bool Destroy(){
 		return false;
 	}
 
-	void Stop()
-	{
+	void Stop(){
 		m_bReady = false;
 		m_thread.join();
 	}
 
 	// Override to process current sample
-	virtual double UserProcess(double dTime)
-	{
+	virtual double UserProcess(double dTime){
 		return 0.0;
 	}
 
-	double GetTime()
-	{
+	double GetTime(){
 		return m_dGlobalTime;
 	}
 
 
 
 public:
-	static std::vector<std::wstring> Enumerate()
-	{
+	static std::vector<std::wstring> Enumerate(){
+
+		// Gets the number of sound devices.
 		int nDeviceCount = waveOutGetNumDevs();
+
+		// Setup a vector with the name of devices.
+		// using the Unicode UTF-16 character set.
 		std::vector<std::wstring> sDevices;
 		WAVEOUTCAPS woc;
-		for (int n = 0; n < nDeviceCount; n++)
-			if (waveOutGetDevCaps(n, &woc, sizeof(WAVEOUTCAPS)) == S_OK)
+		for (int n = 0; n < nDeviceCount; n++) {
+			if (waveOutGetDevCaps(n, &woc, sizeof(WAVEOUTCAPS)) == S_OK) {
 				sDevices.push_back(woc.szPname);
+			}
+		}
 		return sDevices;
 	}
 
-	void SetUserFunction(double(*func)(double))
-	{
+	void SetUserFunction(double(*func)(double)){
 		m_userFunction = func;
 	}
 
-	double clip(double dSample, double dMax)
-	{
-		if (dSample >= 0.0)
-			return fmin(dSample, dMax);
-		else
-			return fmax(dSample, -dMax);
+	double clip(double dSample, double dMax){
+		if (dSample >= 0.0) return fmin(dSample, dMax);
+		else return fmax(dSample, -dMax);
 	}
 
 
@@ -162,9 +171,11 @@ private:
 
 	std::atomic<double> m_dGlobalTime;
 
-	// Handler for soundcard request for more data
-	void waveOutProc(HWAVEOUT hWaveOut, UINT uMsg, DWORD dwParam1, DWORD dwParam2)
-	{
+	// Callback for the API, gets passed the function where you determine the sound
+	// to be played. When the API is done with a block of data, nBlockFree is
+	// incremented. notify_one is part of condition variable used to tell the thread
+	// to start filling the block with data as there is one free.
+	void waveOutProc(HWAVEOUT hWaveOut, UINT uMsg, DWORD dwParam1, DWORD dwParam2){
 		if (uMsg != WOM_DONE) return;
 
 		m_nBlockFree++;
@@ -173,8 +184,7 @@ private:
 	}
 
 	// Static wrapper for sound card handler
-	static void CALLBACK waveOutProcWrap(HWAVEOUT hWaveOut, UINT uMsg, DWORD dwInstance, DWORD dwParam1, DWORD dwParam2)
-	{
+	static void CALLBACK waveOutProcWrap(HWAVEOUT hWaveOut, UINT uMsg, DWORD dwInstance, DWORD dwParam1, DWORD dwParam2){
 		((olcNoiseMaker*)dwInstance)->waveOutProc(hWaveOut, uMsg, dwParam1, dwParam2);
 	}
 
@@ -182,8 +192,7 @@ private:
 	// with audio data. If no requests are available it goes dormant until the sound
 	// card is ready for more data. The block is fille by the "user" in some manner
 	// and then issued to the soundcard.
-	void MainThread()
-	{
+	void MainThread(){
 		m_dGlobalTime = 0.0;
 		double dTimeStep = 1.0 / (double)m_nSampleRate;
 
@@ -192,39 +201,44 @@ private:
 		double dMaxSample = (double)nMaxSample;
 		T nPreviousSample = 0;
 
-		while (m_bReady)
-		{
+		while (m_bReady){
 			// Wait for block to become available
-			if (m_nBlockFree == 0)
-			{
+			if (m_nBlockFree == 0){
 				std::unique_lock<std::mutex> lm(m_muxBlockNotZero);
 				m_cvBlockNotZero.wait(lm);
 			}
 
-			// Block is here, so use it
+			// Block is no longer free as it's going to be filled. Count of
+			// number of free blocks is now decreased.
 			m_nBlockFree--;
 
-			// Prepare block for processing
-			if (m_pWaveHeaders[m_nBlockCurrent].dwFlags & WHDR_PREPARED)
+			// Prepare block for processing, set header to initial state, 
+			// required by waveout.
+			if (m_pWaveHeaders[m_nBlockCurrent].dwFlags & WHDR_PREPARED) {
 				waveOutUnprepareHeader(m_hwDevice, &m_pWaveHeaders[m_nBlockCurrent], sizeof(WAVEHDR));
+			}
+				
 
 			T nNewSample = 0;
 			int nCurrentBlock = m_nBlockCurrent * m_nBlockSamples;
 
-			for (unsigned int n = 0; n < m_nBlockSamples; n++)
-			{
-				// User Process
-				if (m_userFunction == nullptr)
+			for (unsigned int n = 0; n < m_nBlockSamples; n++){
+				// The make noise function is expected to return a value between -1 and 1
+				// which is scaled with the dMaxSample value. The hardware expects an
+				// interger value instead of double so it's fixing this.
+				if (m_userFunction == nullptr) {
 					nNewSample = (T)(clip(UserProcess(m_dGlobalTime), 1.0) * dMaxSample);
-				else
+				}
+				else {
 					nNewSample = (T)(clip(m_userFunction(m_dGlobalTime), 1.0) * dMaxSample);
-
+				}
 				m_pBlockMemory[nCurrentBlock + n] = nNewSample;
 				nPreviousSample = nNewSample;
 				m_dGlobalTime = m_dGlobalTime + dTimeStep;
 			}
 
-			// Send block to sound device
+			// Once the block has filled it's data the header is called, to say it's ready.
+			// the block is then written to the queue.
 			waveOutPrepareHeader(m_hwDevice, &m_pWaveHeaders[m_nBlockCurrent], sizeof(WAVEHDR));
 			waveOutWrite(m_hwDevice, &m_pWaveHeaders[m_nBlockCurrent], sizeof(WAVEHDR));
 			m_nBlockCurrent++;
