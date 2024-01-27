@@ -10,7 +10,7 @@ The sound of objects.
 
 https://docs.microsoft.com/en-us/cpp/build/integrate-vcpkg?view=msvc-160 .
 
-!NOTE There are specific OpenCV libraries for Debug and Release so make sure you're running the correct one.
+> NOTE There are specific OpenCV libraries for Debug and Release so make sure you're running the correct one.
 - Run
 
 ## Compatability
