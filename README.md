@@ -1,5 +1,5 @@
 # cautious-octo-waddle
-The sound of objects.
+Generates mandelbrots to play the sound against.
 
 ## Usage
 ### Windows
